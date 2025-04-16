@@ -1,0 +1,474 @@
+def get_parent_bookmark_from_user(default_value):
+    ctx = XSCRIPTCONTEXT.getComponentContext()
+    smgr = ctx.ServiceManager
+
+    script_provider = smgr.createInstanceWithContext(
+        "com.sun.star.script.provider.MasterScriptProviderFactory", ctx
+    ).createScriptProvider("")
+
+    script = script_provider.getScript(
+        "vnd.sun.star.script:Standard.Module1.InputBoxWrapper?language=Basic&location=application"
+    )
+
+    args = (f"Leave blank to use default:\n{default_value}", "Parent Bookmark", "")
+    result_tuple = script.invoke(args, (), ())
+
+    # Extract string from tuple.
+    if result_tuple and isinstance(result_tuple, tuple):
+        result = result_tuple[0]
+        return result.strip() if result and isinstance(result, str) else default_value
+
+    return default_value
+
+# ------------------------------------------
+#
+def identifyBulletLevelsInSelection():
+    """
+    Iterates through the paragraphs within the current selection in the document.
+    For each paragraph that is part of a numbered/bulleted list,
+    prints the bullet's numbering level.
+    """
+    doc = XSCRIPTCONTEXT.getDocument()
+    selection = doc.getCurrentSelection()
+
+    # This list will hold all paragraphs from the selection.
+    paragraphs = []
+
+    # The selection might be a collection (multiple ranges) or a single text range.
+    try:
+        # If the selection supports getCount, it is a collection of ranges.
+        count = selection.getCount()
+        for i in range(count):
+            sel_range = selection.getByIndex(i)
+            paragraphs.extend(getParagraphsWithinRange(sel_range))
+    except AttributeError:
+        # Otherwise, it's a single text range.
+        paragraphs = getParagraphsWithinRange(selection)
+
+    if not paragraphs:
+        print("No paragraphs found in the selection.")
+        return
+    levels = []
+    for (index, para) in enumerate(paragraphs):
+        try:
+            # Try to get the 'NumberingLevel' property.
+            if index == 0:
+                level = 0
+            else:
+                level = para.getPropertyValue("NumberingLevel") + 1
+            levels.append(level)
+            print("Paragraph:", para.getString())
+            print("Bullet Level:", level)
+            print("-----------")
+        except Exception:
+            # If the property is not available, the paragraph is likely not part of a list.
+            pass
+    return levels
+
+
+def getParagraphsWithinRange(text_range):
+    """
+    Given a text range, this function returns a list of paragraphs
+    (elements that support the "com.sun.star.text.Paragraph" service)
+    that are contained within the given range.
+    """
+    paragraphs = []
+    enum = text_range.createEnumeration()
+    while enum.hasMoreElements():
+        element = enum.nextElement()
+        if element.supportsService("com.sun.star.text.Paragraph"):
+            paragraphs.append(element)
+    return paragraphs
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+def remove_bullet(s):
+    """
+    Removes a bullet character from the start of the string if present.
+    Bullet characters checked: •, ◦, -
+    """
+    if s and s[0] in ("•", "◦", "-"):
+        return s[1:].strip()
+    return s
+
+
+def create_hyperlinked_comma_separated_list():
+    """
+    Iterates over the current selection in the document.
+    For each paragraph in the selection, if a colon is found,
+    it extracts the text before the colon, cleans the text by trimming spaces
+    and removing leading bullet characters, and stores the item.
+
+    Then, at the insertion point (the start of the first selected range),
+    it creates a comma-separated list where each item is a clickable hyperlink.
+
+    The hyperlink URL for each item is constructed using a simple mapping:
+      "http://example.com/<item>"
+    (Spaces in the item are replaced by %20.)
+    """
+    # Obtain the current document from the LibreOffice XSCRIPTCONTEXT.
+    oDoc = XSCRIPTCONTEXT.getDocument()
+    oSelection = oDoc.CurrentSelection
+
+    # Ensure there is a selection.
+    if oSelection.getCount() == 0:
+        print("Please select the nested bullet structure first.")
+        return
+
+    # A list to store the cleaned items.
+    items = []
+
+    # Loop through each selected text range.
+    for i in range(oSelection.getCount()):
+        oRange = oSelection.getByIndex(i)
+        oEnum = oRange.createEnumeration()
+        while oEnum.hasMoreElements():
+            oPara = oEnum.nextElement()
+            sText = oPara.getString()
+
+            # Look for a colon character.
+            pos = sText.find(":")
+            if pos > 0:
+                # Extract text before the colon and trim spaces.
+                sText = sText[:pos].strip()
+                # Remove bullet characters at the start.
+                sText = remove_bullet(sText)
+                items.append(sText)
+
+    # Get insertion point and create a text cursor.
+    oFirstRange = oSelection.getByIndex(0).getStart()
+    oText = oFirstRange.getText()
+    oCursor = oText.createTextCursorByRange(oFirstRange)
+
+    # Insert each hyperlinked item.
+    for idx, item in enumerate(items):
+        # Create a URL field (hyperlink).
+        oURLField = oDoc.createInstance("com.sun.star.text.TextField.URL")
+        # Construct a URL for the item (modify this as needed).
+        # Here, we replace spaces with "%20".
+        url_item = item.replace(" ", "%20")
+        oURLField.URL = "http://example.com/" + url_item
+        oURLField.Representation = item
+
+        # Insert the hyperlink field at the cursor.
+        oText.insertTextContent(oCursor, oURLField, False)
+        # Insert comma and space (if not the last item).
+        if idx < len(items) - 1:
+            oText.insertString(oCursor, ", ", False)
+
+    # Optionally, insert a newline after the list.
+    oText.insertString(oCursor, "\n", False)
+
+    print("The hyperlinked list has been inserted.")
+
+
+import uno
+def insert_hyperlink_above_selection():
+    import re
+
+    doc = XSCRIPTCONTEXT.getDocument()
+    text = doc.Text
+    view_cursor = doc.CurrentController.getViewCursor()
+
+    # Ensure the user has selected text
+    if view_cursor.isCollapsed():
+        print("Please select some text first.")
+        return
+
+    display_text = view_cursor.getString().strip()
+    if not display_text:
+        print("Selected text is empty.")
+        return
+
+    # --- Step 1: Create a bookmark over the selected text ---
+    # Normalize bookmark name (no spaces or special chars)
+    bookmark_name = "bm_" + re.sub(r'\W+', '_', display_text)
+
+    # Create and insert the bookmark over the selection
+    text_cursor = text.createTextCursorByRange(view_cursor.getStart())
+    bookmark = doc.createInstance("com.sun.star.text.Bookmark")
+    bookmark.Name = bookmark_name
+    text.insertTextContent(text_cursor, bookmark, False)
+
+    # --- Step 2: Create a new cursor above the paragraph ---
+    insert_cursor = text.createTextCursorByRange(view_cursor.getStart())
+    insert_cursor.gotoStartOfParagraph(False)
+
+    # --- Step 3: Insert the hyperlinked line above the selection ---
+    full_doc_url = doc.URL  # e.g., file:///home/molefe/Macro.odt
+    hyperlink_url = full_doc_url + "#" + bookmark_name
+
+    text.insertString(insert_cursor, display_text + "\n", False)
+    insert_cursor.goLeft(len(display_text) + 1, True)  # +1 for newline
+    insert_cursor.HyperLinkURL = hyperlink_url
+    insert_cursor.HyperLinkName = display_text
+    insert_cursor.HyperLinkTarget = ""
+
+    print(f"Inserted hyperlink to bookmark '{bookmark_name}' above the selected text.")
+def insert_comma_separated_hyperlinks_above_selection():
+    import re
+
+    doc = XSCRIPTCONTEXT.getDocument()
+    text = doc.Text
+    view_cursor = doc.CurrentController.getViewCursor()
+
+    if view_cursor.isCollapsed():
+        print("Please select bullet-point text.")
+        return
+
+    # 🔁 Store selection string BEFORE inserting anything
+    selected_string = view_cursor.getString()
+    lines = selected_string.splitlines()
+
+    # 📌 Extract prefix text before colon
+    prefix_list = []
+    for line in lines:
+        if ":" in line:
+            prefix = line.split(":")[0].strip()
+            if prefix:
+                prefix_list.append(prefix)
+
+    if not prefix_list:
+        print("No valid prefixes found.")
+        return
+
+    # 📍 Step 1: Insert comma-separated summary ABOVE the selection
+    summary_cursor = text.createTextCursorByRange(view_cursor.getStart())
+    summary_cursor.gotoStartOfParagraph(False)
+
+    combined_text = ", ".join(prefix_list)
+    text.insertString(summary_cursor, combined_text + "\n", False)
+
+    # 🔗 Step 2: Apply hyperlinks to the inserted summary
+    summary_cursor.goLeft(len(combined_text) + 1, True)
+    summary_cursor.collapseToStart()
+
+    full_doc_url = doc.URL
+    for i, prefix in enumerate(prefix_list):
+        bookmark_name = "bm_" + re.sub(r'\W+', '_', prefix)
+        hyperlink_url = full_doc_url + "#" + bookmark_name
+
+        if not summary_cursor.goRight(len(prefix), True):
+            break
+
+        summary_cursor.HyperLinkURL = hyperlink_url
+        summary_cursor.HyperLinkName = prefix
+        summary_cursor.HyperLinkTarget = ""
+        summary_cursor.collapseToEnd()
+
+        if i < len(prefix_list) - 1:
+            summary_cursor.goRight(2, False)
+
+    # 🏷️ Step 3: Bookmark all lines from the ORIGINAL SELECTION
+    current_range = text.createTextCursorByRange(view_cursor.getStart())
+    current_range.gotoNextParagraph(False)  # ✅ Now this will work
+
+    for line in lines[1:]:
+        if ":" not in line:
+            continue
+
+        prefix = line.split(":")[0].strip()
+        bookmark_name = "bm_" + re.sub(r'\W+', '_', prefix)
+
+        line_cursor = text.createTextCursorByRange(current_range)
+        line_cursor.gotoStartOfParagraph(False)
+
+        # Select only the prefix (before the colon)
+        if not line_cursor.goRight(len(prefix), True):
+            continue  # If something goes wrong, skip
+        bookmark = doc.createInstance("com.sun.star.text.Bookmark")
+        bookmark.Name = bookmark_name
+        text.insertTextContent(line_cursor, bookmark, True)
+
+        # Move to next paragraph
+        current_range = text.createTextCursorByRange(line_cursor.getEnd())
+        current_range.gotoNextParagraph(False)
+
+    print("✅ Summary inserted with hyperlinks; bookmarks placed correctly.")
+
+def insert_nested_bookmark_summary():
+    import re
+
+    doc = XSCRIPTCONTEXT.getDocument()
+    text = doc.Text
+    view_cursor = doc.CurrentController.getViewCursor()
+
+    if view_cursor.isCollapsed():
+        print("Please select bullet-point text.")
+        return
+
+    # 🔁 Get selected lines
+    selected_string = view_cursor.getString()
+    lines = selected_string.splitlines()
+
+    if not lines or ":" not in lines[0]:
+        print("Root title (first line) must contain a colon.")
+        return
+
+    # 🧭 Extract default parent from the root
+    root_title = lines[0].split(":")[0].strip()
+    default_parent_bookmark = f"Section 1 {root_title}"
+    parent_bookmark = get_parent_bookmark_from_user(default_parent_bookmark)
+
+    # 📌 Parse child titles (ignore the root line)
+    prefix_list = []
+    child_bookmarks = []
+
+    for line in lines[1:]:
+        if ":" in line:
+            title = line.split(":")[0].strip()
+            full_bookmark = f"{parent_bookmark} {title}"
+            prefix_list.append(title)
+            child_bookmarks.append(full_bookmark)
+
+    if not prefix_list:
+        print("No valid nested titles found.")
+        return
+
+    # 📍 Insert summary above the block
+    summary_cursor = text.createTextCursorByRange(view_cursor.getStart())
+    summary_cursor.gotoStartOfParagraph(False)
+
+    # Insert the summary line
+    summary_line = ", ".join(prefix_list)
+    text.insertString(summary_cursor, summary_line + "\n", False)
+    summary_cursor.goLeft(len(summary_line) + 1, True)
+    summary_cursor.collapseToStart()
+
+    # 🔗 Insert hyperlinks on summary line
+    full_doc_url = doc.URL
+    for i, (title, full_bm) in enumerate(zip(prefix_list, child_bookmarks)):
+        hyperlink_url = full_doc_url + "#" + full_bm
+
+        if not summary_cursor.goRight(len(title), True):
+            break
+
+        summary_cursor.HyperLinkURL = hyperlink_url
+        summary_cursor.HyperLinkName = title
+        summary_cursor.HyperLinkTarget = ""
+        summary_cursor.collapseToEnd()
+
+        if i < len(prefix_list) - 1:
+            summary_cursor.goRight(2, False)
+
+    # 🏷️ Add bookmarks to each bullet paragraph using full path
+    current_range = text.createTextCursorByRange(view_cursor.getStart())
+    current_range.gotoNextParagraph(False)
+
+    for (title, full_bm) in zip(prefix_list, child_bookmarks):
+        # title = full_bm.split()[-1]
+
+        line_cursor = text.createTextCursorByRange(current_range)
+        line_cursor.gotoStartOfParagraph(False)
+
+        if not line_cursor.goRight(len(title), True):
+            continue
+
+        bookmark = doc.createInstance("com.sun.star.text.Bookmark")
+        bookmark.Name = full_bm
+        text.insertTextContent(line_cursor, bookmark, True)
+
+        # 🔗 Insert hyperlink on the colon ":" to point to the "{bookmark_name} Contents"
+        colon_cursor = text.createTextCursorByRange(line_cursor.getStart())
+        if colon_cursor.goRight(len(title), False) and colon_cursor.goRight(1, True):
+            if colon_cursor.getString() == ":":
+                colon_cursor.HyperLinkURL = full_doc_url + "#" + full_bm + " Contents"
+                colon_cursor.HyperLinkName = full_bm + " Contents"
+                colon_cursor.HyperLinkTarget = ""
+
+        current_range = text.createTextCursorByRange(line_cursor.getEnd())
+        current_range.gotoNextParagraph(False)
+
+    print("✅ Nested bookmarks and summary inserted.")
+
+def get_parent_bookmark_from_user(default_value):
+    ctx = XSCRIPTCONTEXT.getComponentContext()
+    smgr = ctx.ServiceManager
+
+    script_provider = smgr.createInstanceWithContext(
+        "com.sun.star.script.provider.MasterScriptProviderFactory", ctx
+    ).createScriptProvider("")
+
+    script = script_provider.getScript(
+        "vnd.sun.star.script:Standard.Module1.InputBoxWrapper?language=Basic&location=application"
+    )
+
+    args = (f"Leave blank to use default:\n{default_value}", "Parent Bookmark", "")
+    result_tuple = script.invoke(args, (), ())
+
+    # Extract string from tuple
+    if result_tuple and isinstance(result_tuple, tuple):
+        result = result_tuple[0]
+        return result.strip() if result and isinstance(result, str) else default_value
+
+    return default_value
+
+
+
+
+
+def insert_hyperlink_and_duplicate():
+    doc = XSCRIPTCONTEXT.getDocument()
+    text = doc.Text
+    view_cursor = doc.CurrentController.getViewCursor()
+
+    # Step 1: Apply hyperlink to selected or inserted text
+    if view_cursor.isCollapsed():
+        # No text selected — insert and select "Click Here"
+        display_text = "Click Here"
+        view_cursor.String = display_text
+        view_cursor.goLeft(len(display_text), True)
+    else:
+        display_text = view_cursor.getString()
+
+    # Apply hyperlink
+    hyperlink_url = "https://example.com"
+    view_cursor.HyperLinkURL = hyperlink_url
+    view_cursor.HyperLinkName = "example"
+    view_cursor.HyperLinkTarget = ""
+
+    # Step 2: Move cursor to the end and insert same hyperlink text again
+    end_cursor = text.createTextCursor()
+    end_cursor.gotoEnd(False)
+    text.insertString(end_cursor, "\n" + display_text, False)
+    end_cursor.goLeft(len(display_text), True)
+    end_cursor.HyperLinkURL = hyperlink_url
+    end_cursor.HyperLinkName = "duplicate"
+    end_cursor.HyperLinkTarget = ""
+
+    print("Original and duplicate hyperlinks inserted.")
+
+
+
+
+ # --- Step 3: Insert the navigation line above the original paragraph ---
+    # Get an insertion cursor at the start of the current paragraph.
+    insert_cursor = text.createTextCursorByRange(view_cursor.getStart())
+    insert_cursor.gotoStartOfParagraph(False)
+    # Navigation string includes the clean title and a newline.
+    navigation_line = clean_title + chr(13)
+    text.insertString(insert_cursor, navigation_line, False)
+    # Now, insert_cursor is at the end of the inserted text.
+
+    # --- Step 4: Rewind the insertion cursor to select just the inserted text ---
+    # Move the cursor left by the entire navigation_line so it selects the inserted text.
+    if not insert_cursor.goLeft(len(navigation_line), True):
+        show_message("Error selecting the inserted navigation text.", "Error", boxtype=ERRORBOX)
+        return
+    # Collapse the selection to its start.
+    insert_cursor.collapseToStart()
+    # Now move right exactly by the length of clean_title (excluding the newline)
+    if not insert_cursor.goRight(len(clean_title), True):
+        show_message("Error refining the selection for the navigation text.", "Error", boxtype=ERRORBOX)
+        return
+
+    full_doc_url = doc.URL
+    if not full_doc_url:
+        show_message("Please save the document before running this macro.",
+                     "Save Required", boxtype=ERRORBOX)
+        return
+    # Apply the hyperlink to the inserted navigation text to link back to the main bookmark.
+    insert_cursor.HyperLinkURL = full_doc_url + "#" + main_bookmark
+
+    # --- Step 5: Apply the TOC bookmark over the inserted navigation text ---
+    toc_bm_obj = doc.createInstance("com.sun.star.text.Bookmark")
+    toc_bm_obj.Name = toc_bookmark
+    text.insertTextContent(insert_cursor, toc_bm_obj, True)
