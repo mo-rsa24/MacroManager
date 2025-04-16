@@ -203,32 +203,36 @@ def naming_strategy_custom(manager, clean_title):
 # --- Module-level API Functions ---
 def bidirectional_link():
     """
-    Shortcut: Ctrl + Shift + Alt + S
-    Creates bi-directional bookmarks and hyperlinks for a selected heading using the section-number strategy.
+    Function:
+        - Creates bi-directional bookmarks and hyperlinks for a selected heading using the section-number strategy.
+    Shortcut: Ctrl + Shift + Alt + A
     """
     manager = BidirectionalLinkManager()
     manager.process_link(naming_strategy_section, replacement_char=":")
 
 def bidirectional_link_with_parent():
     """
-    Shortcut: Ctrl + Shift + Alt + P
-    Creates bi-directional bookmarks and hyperlinks for a selected heading using the parent-bookmark strategy.
+    Function:
+        - Creates bi-directional bookmarks and hyperlinks for a selected heading using the parent-bookmark strategy.
+    Shortcut: Ctrl + Shift + Alt + H
     """
     manager = BidirectionalLinkManager()
     manager.process_link(naming_strategy_parent, replacement_char=":")
 
 def custom_bidirectional_link():
     """
-    Shortcut: Ctrl + Shift + Alt + C
-    Creates bi-directional bookmarks and hyperlinks using a custom bookmark name (with colon marker).
+    Function:
+        - Creates bi-directional bookmarks and hyperlinks using a custom bookmark name (with colon marker).
+    Shortcut: Ctrl + Shift + Alt + B
     """
     manager = BidirectionalLinkManager()
     manager.process_link(naming_strategy_custom, replacement_char=":")
 
 def custom_bidirectional_link_for_code():
     """
-    Shortcut: Ctrl + Shift + Alt + X
-    Creates bi-directional bookmarks and hyperlinks using a custom bookmark name but replaces the colon with an up arrow.
+    Function:
+        - Creates bi-directional bookmarks and hyperlinks using a custom bookmark name but replaces the colon with an up arrow.
+    Shortcut: Ctrl + Shift + Alt + C
     """
     manager = BidirectionalLinkManager()
     manager.process_link(naming_strategy_custom, replacement_char="↑")

@@ -148,10 +148,33 @@ def attach_media_macro():
     FileManager().attach_latest_media_to("")
 
 def insert_media_into_references_folder():
+    """
+    Function:
+        - Fetch latest media file (.png, .mp4, .webm)
+        - Rename using selected text in the document
+        - Move into a subfolder called "References"
+        - Insert hyperlink over the selected text
+    Shortcut: Ctrl + Shift + Alt + R
+    """
     FileManager().attach_latest_media_to("References")
 
 def insert_media_into_outputs_folder():
+    """
+        Function:
+            - Fetch latest media file (.png, .mp4, .webm)
+            - Rename using selected text in the document
+            - Move into a subfolder called "Outputs"
+            - Insert hyperlink over the selected text
+        Shortcut: Ctrl + Shift + Alt + O
+    """
     FileManager().attach_latest_media_to("Outputs")
 
 def insert_latest_pdf_into_document():
+    """
+        Function:
+            -  Finds the latest PDF or DOCX from ~/vmshare,
+            - moves it to a 'PDF' subfolder in the doc directory,
+            - renames it based on selected text, and hyperlinks it in the document.
+        Shortcut: Ctrl + Shift + Alt + P
+    """
     FileManager().attach_latest_document_to_pdf_folder("PDF")

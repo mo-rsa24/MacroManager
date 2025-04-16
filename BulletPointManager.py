@@ -454,11 +454,29 @@ def insert_nested_bookmark_summary():
 
 def insert_nested_bookmark_summaries():
     """
+    Function:
+        - Main template method that performs the following steps:
+         1. Validates the selection.
+         2. Extracts the selection lines.
+         3. Determines bullet levels.
+         4. Verifies that the first line contains a colon.
+         5. Obtains a base parent bookmark from the user.
+         6. Builds the bookmark chain (titles & full bookmark names).
+         7. Inserts the summary line with hyperlinks.
+         8. Adds bullet bookmarks to each bullet paragraph.
+        The separator and add_extra_bookmarks flag allow you to adjust the behavior
+        (for example, basic vs. extended summary).
     Shortcut: Ctrl + Shift + Alt + N
     """
     manager = BulletPointManager()
     manager.process_nested_bookmark_summary(separator="| ", add_extra_bookmarks=True)
 
 def change_character_style():
+    """
+    Function:
+        - Reads the parent's bullet title portion (exact text run) to retrieve its
+        - character style name, then assigns that style to the child's title text.
+    Shortcut: Ctrl + Shift + Alt + S
+    """
     manager = BulletPointManager()
     manager.propagate_title_character_style()
