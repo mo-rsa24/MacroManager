@@ -330,6 +330,74 @@ class BulletPointManager:
         self.show_message("Character styles propagated to nested bullet titles.",
                           "Style Propagation Success")
 
+    def propagate_bold_title_character_style(self):
+        """
+        Propagates the character style from the parent bullet's title to all bold text in child bullets.
+        """
+        selection = self.doc.getCurrentSelection()
+        paragraphs = []
+        try:
+            count = selection.getCount()
+            for i in range(count):
+                sel_range = selection.getByIndex(i)
+                paragraphs.extend(self.get_paragraphs_within_range(sel_range))
+        except AttributeError:
+            paragraphs = self.get_paragraphs_within_range(selection)
+
+        if not paragraphs:
+            self.show_message("No bullet paragraphs found in the selection.", "Error", boxtype=ERRORBOX)
+            return
+
+        style_stack = {}
+
+        for idx, para in enumerate(paragraphs):
+            try:
+                level = 0 if idx == 0 else para.getPropertyValue("NumberingLevel") + 1
+            except Exception:
+                level = 0
+
+            full_text = para.getString()
+            if not full_text:
+                continue
+
+            cursor = self.text.createTextCursorByRange(para)
+            cursor.gotoStartOfParagraph(False)
+
+            # Parent paragraph: capture style of its title (text before ":")
+            if level == 0 and ":" in full_text:
+                title = full_text.split(":", 1)[0].strip()
+                cursor.gotoStartOfParagraph(False)
+                if cursor.goRight(len(title), True):
+                    parent_style = cursor.getPropertyValue("CharStyleName")
+                    if parent_style and parent_style != "No Character Style":
+                        style_stack[level] = parent_style
+
+            # Apply inherited style to bold segments
+            else:
+                inherited_style = None
+                for lvl in range(level - 1, -1, -1):
+                    if lvl in style_stack:
+                        inherited_style = style_stack[lvl]
+                        break
+                if not inherited_style:
+                    continue
+
+                # Scan paragraph and apply style to bold segments
+                cursor.gotoStartOfParagraph(False)
+                while cursor.goRight(1, True):
+                    try:
+                        if cursor.getPropertyValue("CharWeight") == BOLD:
+                            cursor.setPropertyValue("CharStyleName", inherited_style)
+                            cursor.setPropertyValue("CharWeight", BOLD)
+                    except Exception:
+                        pass
+                    cursor.collapseToEnd()
+                    if cursor.isEndOfParagraph():
+                        break
+
+        self.show_message("Bold text styled using parent bullet's character style.",
+                          "Style Propagation Success")
+
     def insert_parent_bookmark_hyperlink(self, titles, bookmarks):
         """
         Locates the *parent* bullet (titles[0]) in the current selection,
@@ -469,7 +537,7 @@ def insert_nested_bookmark_summaries():
     Shortcut: Ctrl + Shift + Alt + N
     """
     manager = BulletPointManager()
-    manager.process_nested_bookmark_summary(separator="| ", add_extra_bookmarks=True)
+    manager.process_nested_bookmark_summary(separator=" | ", add_extra_bookmarks=True)
 
 def change_character_style():
     """
@@ -480,3 +548,13 @@ def change_character_style():
     """
     manager = BulletPointManager()
     manager.propagate_title_character_style()
+
+def change_bold_character_style():
+    """
+    Function:
+        - Reads the parent's bullet title portion (exact text run) to retrieve its
+        - character style name, then assigns that style to the child's bold text.
+    Shortcut: Ctrl + Shift + Alt + E
+    """
+    manager = BulletPointManager()
+    manager.propagate_bold_title_character_style()
